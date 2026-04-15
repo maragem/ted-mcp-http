@@ -13,10 +13,14 @@ from mcp.server.fastmcp import FastMCP
 
 # ── Server ─────────────────────────────────────────────────────────────────────
 
+port = int(os.environ.get("PORT", 8000))
+
 mcp = FastMCP(
     "TED Procurement Notices",
     stateless_http=True,
     json_response=True,
+    host="0.0.0.0",
+    port=port,
 )
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -296,9 +300,4 @@ def _notice_url(pub_number: str, fmt: str, lang: str) -> str:
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    mcp.run(
-        transport="streamable-http",
-        host="0.0.0.0",
-        port=port,
-    )
+    mcp.run(transport="streamable-http")
