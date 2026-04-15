@@ -4,10 +4,20 @@ HTTP transport — ready for Railway deployment.
 
 Search API:  https://api.ted.europa.eu/v3  (anonymous)
 Downloads:   https://ted.europa.eu/{lang}/notice/{pub_number}/{format}
+
+Payload reference (from official TED workshop Q&A):
+{
+    "query": "place-of-performance IN (LUX)",
+    "fields": ["publication-number", "notice-title", "buyer-name"],
+    "page": 1,
+    "limit": 10,
+    "scope": "ACTIVE",
+    "checkQuerySyntax": false,
+    "paginationMode": "PAGE_NUMBER"
+}
 """
 
 import os
-import json
 import httpx
 from mcp.server.fastmcp import FastMCP
 
@@ -25,19 +35,44 @@ mcp = FastMCP(
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-SEARCH_API_BASE = "https://api.ted.europa.eu/v3"
-NOTICE_BASE     = "https://ted.europa.eu"
+SEARCH_URL  = "https://api.ted.europa.eu/v3/notices/search"
+NOTICE_BASE = "https://ted.europa.eu"
 
 HEADERS = {
     "User-Agent": "TED-MCP-Server/1.0 (MCP HTTP integration; anonymous reuser)",
     "Accept": "application/json",
+    "Content-Type": "application/json",
 }
+
+# Fields accepted by the v3 API
+DEFAULT_FIELDS = [
+    "publication-number",
+    "notice-title",
+    "buyer-name",
+    "buyer-country",
+    "cpv-code",
+    "publication-date",
+    "deadline-receipt-request",
+    "notice-type",
+]
 
 VALID_FORMATS = {"html", "pdf", "pdfs", "xml"}
 VALID_LANGUAGES = {
     "bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr",
     "ga", "hr", "hu", "it", "lt", "lv", "mt", "nl", "pl", "pt",
     "ro", "sk", "sl", "sv",
+}
+
+# ISO alpha-2 -> 3-letter country codes used by TED v3 query syntax
+COUNTRY_MAP = {
+    "AT": "AUT", "BE": "BEL", "BG": "BGR", "CY": "CYP", "CZ": "CZE",
+    "DE": "DEU", "DK": "DNK", "EE": "EST", "ES": "ESP", "FI": "FIN",
+    "FR": "FRA", "GR": "GRC", "HR": "HRV", "HU": "HUN", "IE": "IRL",
+    "IT": "ITA", "LT": "LTU", "LU": "LUX", "LV": "LVA", "MT": "MLT",
+    "NL": "NLD", "PL": "POL", "PT": "PRT", "RO": "ROU", "SE": "SWE",
+    "SI": "SVN", "SK": "SVK",
+    # non-EU but appear on TED
+    "NO": "NOR", "CH": "CHE", "IS": "ISL", "GB": "GBR",
 }
 
 # ── Tools ──────────────────────────────────────────────────────────────────────
@@ -47,49 +82,41 @@ async def search_notices(
     query: str,
     page: int = 1,
     page_size: int = 10,
+    scope: str = "ALL",
 ) -> dict:
     """
     Search TED (Tenders Electronic Daily) EU procurement notices.
 
-    Supports plain keywords (e.g. 'hospital construction Luxembourg') or
-    TED expert-search syntax:
-      - CY=[LU]           — filter by country (ISO code)
-      - TD=[3]            — notice type (3 = Contract notice)
-      - PC=[45*]          — CPV code prefix (45 = construction)
-      - PD=[20240101,20241231] — publication date range
-      - ND=[00123456-2024] — specific notice number
-    Combine with AND / OR, e.g. 'TD=[3] AND CY=[FR] AND PC=[72*]'
-
-    Returns publication numbers, titles, buyers, countries, CPV codes,
-    and publication dates.
+    Uses the new TED v3 API query syntax. Examples:
+      - plain keywords:          "hospital construction"
+      - by country:              "buyer-country IN (LUX)"
+      - by CPV sector:           "cpv-code IN (45000000)"
+      - by notice type:          "notice-type IN (cn-standard)"
+      - by publication date:     "publication-date >= 20240101"
+      - combined:                "buyer-country IN (LUX) AND cpv-code IN (45000000)"
 
     Args:
-        query: Free-text or expert-syntax search string.
+        query: Search string using TED v3 query syntax or plain keywords.
         page: Page number (1-based). Default 1.
-        page_size: Results per page, max 100. Default 10.
+        page_size: Results per page (1-100). Default 10.
+        scope: "ACTIVE" (open tenders only) or "ALL" (all notices). Default "ALL".
     """
     page = max(1, page)
     page_size = min(100, max(1, page_size))
+    scope = scope.upper() if scope.upper() in ("ACTIVE", "ALL") else "ALL"
 
     payload = {
         "query": query,
+        "fields": DEFAULT_FIELDS,
         "page": page,
         "limit": page_size,
-        "fields": [
-            "publication-number", "title", "buyer-name",
-            "country", "cpv", "publication-date",
-            "deadline-receipt-request", "notice-type",
-        ],
-        "scope": "ALL",
+        "scope": scope,
+        "checkQuerySyntax": False,
         "paginationMode": "PAGE_NUMBER",
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{SEARCH_API_BASE}/notices/search",
-            headers={**HEADERS, "Content-Type": "application/json"},
-            json=payload,
-        )
+        resp = await client.post(SEARCH_URL, headers=HEADERS, json=payload)
         resp.raise_for_status()
         data = resp.json()
 
@@ -104,7 +131,6 @@ async def search_notices(
 @mcp.tool()
 async def get_notice(
     publication_number: str,
-    fields: list[str] | None = None,
 ) -> dict:
     """
     Retrieve full metadata for a specific TED notice by its publication number.
@@ -112,25 +138,19 @@ async def get_notice(
     Args:
         publication_number: TED publication number, e.g. '123456-2024' or
                             '00123456-2024'. Found in search results.
-        fields: Optional list of specific fields to return. Leave empty for
-                all available fields.
     """
-    payload: dict = {
-        "query": f"ND=[{publication_number.strip()}]",
+    payload = {
+        "query": f"publication-number IN ({publication_number.strip()})",
+        "fields": DEFAULT_FIELDS,
         "page": 1,
         "limit": 1,
         "scope": "ALL",
+        "checkQuerySyntax": False,
         "paginationMode": "PAGE_NUMBER",
     }
-    if fields:
-        payload["fields"] = fields
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{SEARCH_API_BASE}/notices/search",
-            headers={**HEADERS, "Content-Type": "application/json"},
-            json=payload,
-        )
+        resp = await client.post(SEARCH_URL, headers=HEADERS, json=payload)
         resp.raise_for_status()
         data = resp.json()
 
@@ -153,15 +173,12 @@ async def download_notice(
     Download or fetch the content of a TED notice.
 
     For HTML and XML: returns the full text content inline.
-    For PDF / signed PDF: returns a direct download URL (binary files
-    are not returned inline).
+    For PDF / signed PDF: returns a direct download URL.
 
     Args:
         publication_number: TED publication number, e.g. '123456-2024'.
-        format: 'html' (rendered HTML), 'pdf' (unsigned PDF),
-                'pdfs' (signed PDF), or 'xml' (raw eForms/TED-schema XML).
-        language: Two-letter EU language code, e.g. 'en', 'fr', 'de'.
-                  Defaults to 'en'. (XML is always returned in English.)
+        format: 'html', 'pdf' (unsigned), 'pdfs' (signed), or 'xml'.
+        language: Two-letter EU language code, e.g. 'en', 'fr', 'de'. Default 'en'.
     """
     fmt  = format.lower()
     lang = language.lower()
@@ -185,7 +202,7 @@ async def download_notice(
     async with httpx.AsyncClient(
         timeout=30,
         follow_redirects=True,
-        headers={**HEADERS, "Accept": "text/html,application/xml,*/*"},
+        headers={"User-Agent": HEADERS["User-Agent"], "Accept": "text/html,application/xml,*/*"},
     ) as client:
         resp = await client.get(url)
         resp.raise_for_status()
@@ -211,13 +228,13 @@ def get_notice_url(
     language: str = "en",
 ) -> dict:
     """
-    Return the direct TED URL for a notice — without downloading it.
+    Return the direct TED URL for a notice without downloading it.
     Useful for sharing links or opening in a browser.
 
     Args:
         publication_number: TED publication number, e.g. '123456-2024'.
         format: 'html', 'pdf', 'pdfs', or 'xml'.
-        language: Two-letter EU language code. Defaults to 'en'.
+        language: Two-letter EU language code. Default 'en'.
     """
     fmt  = format.lower()
     lang = language.lower()
@@ -240,53 +257,49 @@ async def get_latest_notices(
     count: int = 10,
     country: str | None = None,
     cpv_code: str | None = None,
+    scope: str = "ALL",
 ) -> dict:
     """
     Fetch the most recently published TED procurement notices.
-    Useful for monitoring new tenders in real time.
 
     Args:
-        count: Number of notices to return (1–50). Default 10.
+        count: Number of notices to return (1-50). Default 10.
         country: ISO 3166-1 alpha-2 country code, e.g. 'FR', 'DE', 'LU'.
                  Leave empty for all countries.
-        cpv_code: CPV code prefix to filter by sector, e.g. '45' for
-                  construction, '72' for IT services. Leave empty for all.
+        cpv_code: Full CPV code to filter by, e.g. '45000000' for construction
+                  or '72000000' for IT services. Leave empty for all sectors.
+        scope: "ACTIVE" (open tenders) or "ALL" (all notices). Default "ALL".
     """
     count = min(50, max(1, count))
+    scope = scope.upper() if scope.upper() in ("ACTIVE", "ALL") else "ALL"
 
     clauses = []
     if country:
-        clauses.append(f"CY=[{country.upper().strip()}]")
+        iso2 = country.upper().strip()
+        iso3 = COUNTRY_MAP.get(iso2, iso2)   # map to 3-letter code if known
+        clauses.append(f"buyer-country IN ({iso3})")
     if cpv_code:
-        clauses.append(f"PC=[{cpv_code.strip()}*]")
+        clauses.append(f"cpv-code IN ({cpv_code.strip()})")
 
-    # Append sort to query using TED expert syntax
-    base_query = " AND ".join(clauses) if clauses else "*"
-    query = f"{base_query} SORT BY PD DESC"
+    query = " AND ".join(clauses) if clauses else "*"
 
     payload = {
         "query": query,
+        "fields": DEFAULT_FIELDS,
         "page": 1,
         "limit": count,
-        "fields": [
-            "publication-number", "title", "buyer-name", "country",
-            "cpv", "publication-date", "deadline-receipt-request", "notice-type",
-        ],
-        "scope": "ALL",
+        "scope": scope,
+        "checkQuerySyntax": False,
         "paginationMode": "PAGE_NUMBER",
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{SEARCH_API_BASE}/notices/search",
-            headers={**HEADERS, "Content-Type": "application/json"},
-            json=payload,
-        )
+        resp = await client.post(SEARCH_URL, headers=HEADERS, json=payload)
         resp.raise_for_status()
         data = resp.json()
 
     return {
-        "filters": {"country": country, "cpv_code": cpv_code},
+        "filters": {"country": country, "cpv_code": cpv_code, "scope": scope},
         "count_requested": count,
         "notices": data.get("notices", []),
     }
