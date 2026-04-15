@@ -87,16 +87,39 @@ async def search_notices(
     """
     Search TED (Tenders Electronic Daily) EU procurement notices.
 
-    Uses the new TED v3 API query syntax. Examples:
-      - plain keywords:          "hospital construction"
-      - by country:              "buyer-country IN (LUX)"
-      - by CPV sector:           "cpv-code IN (45000000)"
-      - by notice type:          "notice-type IN (cn-standard)"
-      - by publication date:     "publication-date >= 20240101"
-      - combined:                "buyer-country IN (LUX) AND cpv-code IN (45000000)"
+    IMPORTANT — use ONLY the TED v3 query syntax below. Any other syntax
+    causes a 400 error.
+
+    CORRECT syntax examples:
+      plain keywords:        "defense equipment"
+      by country:            "buyer-country IN (LUX)"
+      by CPV code (exact):   "cpv-code IN (35000000)"
+      by notice type:        "notice-type IN (cn-standard)"
+      by date:               "publication-date >= 20240101"
+      combined:              "buyer-country IN (FRA) AND cpv-code IN (35000000)"
+      wildcard text search:  "defense"
+
+    WRONG — never use this old syntax (causes 400):
+      CY=[LU]  PC=[35*]  TD=[3]  ND=[...]  PD=[...]  SORT BY PD
+
+    Common CPV codes for sectors:
+      35000000 = defence / security equipment
+      45000000 = construction works
+      72000000 = IT services
+      33000000 = medical equipment
+      60000000 = transport services
+
+    Common notice types:
+      cn-standard = contract notice (open tender)
+      can-standard = contract award notice
+      pin-only = prior information notice
+
+    Country codes (3-letter ISO used by TED v3):
+      LUX=Luxembourg, FRA=France, DEU=Germany, BEL=Belgium,
+      NLD=Netherlands, ESP=Spain, ITA=Italy, POL=Poland
 
     Args:
-        query: Search string using TED v3 query syntax or plain keywords.
+        query: Search string using TED v3 syntax shown above.
         page: Page number (1-based). Default 1.
         page_size: Results per page (1-100). Default 10.
         scope: "ACTIVE" (open tenders only) or "ALL" (all notices). Default "ALL".
@@ -117,7 +140,18 @@ async def search_notices(
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(SEARCH_URL, headers=HEADERS, json=payload)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            return {
+                "error": f"TED API returned {resp.status_code}",
+                "api_message": resp.text,
+                "payload_sent": payload,
+                "hint": (
+                    "Use TED v3 syntax only: "
+                    "'buyer-country IN (LUX)', 'cpv-code IN (45000000)', "
+                    "'notice-type IN (cn-standard)'. "
+                    "DO NOT use old syntax like CY=[LU] or PC=[35*]."
+                ),
+            }
         data = resp.json()
 
     return {
