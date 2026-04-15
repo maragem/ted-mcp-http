@@ -74,13 +74,14 @@ async def search_notices(
     payload = {
         "query": query,
         "page": page,
-        "pageSize": page_size,
+        "limit": page_size,
         "fields": [
             "publication-number", "title", "buyer-name",
             "country", "cpv", "publication-date",
             "deadline-receipt-request", "notice-type",
         ],
         "scope": "ALL",
+        "paginationMode": "PAGE_NUMBER",
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -117,8 +118,9 @@ async def get_notice(
     payload: dict = {
         "query": f"ND=[{publication_number.strip()}]",
         "page": 1,
-        "pageSize": 1,
+        "limit": 1,
         "scope": "ALL",
+        "paginationMode": "PAGE_NUMBER",
     }
     if fields:
         payload["fields"] = fields
@@ -258,19 +260,20 @@ async def get_latest_notices(
     if cpv_code:
         clauses.append(f"PC=[{cpv_code.strip()}*]")
 
-    query = " AND ".join(clauses) if clauses else "*"
+    # Append sort to query using TED expert syntax
+    base_query = " AND ".join(clauses) if clauses else "*"
+    query = f"{base_query} SORT BY PD DESC"
 
     payload = {
         "query": query,
         "page": 1,
-        "pageSize": count,
+        "limit": count,
         "fields": [
             "publication-number", "title", "buyer-name", "country",
             "cpv", "publication-date", "deadline-receipt-request", "notice-type",
         ],
         "scope": "ALL",
-        "sortField": "publication-date",
-        "sortOrder": "DESC",
+        "paginationMode": "PAGE_NUMBER",
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
