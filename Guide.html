@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deploy TED MCP Server to Railway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0c10;
+    --surface:   #111318;
+    --border:    #1e2230;
+    --accent:    #e8ff57;
+    --accent2:   #57c8ff;
+    --accent3:   #ff6b6b;
+    --text:      #e4e8f0;
+    --muted:     #6b7280;
+    --code-bg:   #0d1117;
+    --step-size: 2.5rem;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+  .page { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 0 2rem 6rem; }
+  .hero { padding: 5rem 0 4rem; border-bottom: 1px solid var(--border); margin-bottom: 4rem; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: rgba(232,255,87,0.08); border: 1px solid rgba(232,255,87,0.2);
+    color: var(--accent); font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem; padding: 0.35rem 0.85rem; border-radius: 2rem;
+    margin-bottom: 1.75rem; letter-spacing: 0.04em;
+  }
+  .hero-badge::before { content: '▸'; }
+  h1 { font-family: 'Syne', sans-serif; font-size: clamp(2.4rem, 5vw, 3.6rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 1.25rem; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .hero-sub { font-size: 1.125rem; color: var(--muted); max-width: 580px; font-weight: 300; }
+  .hero-sub strong { color: var(--text); font-weight: 500; }
+  .toc { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0.5rem; padding: 1.5rem 1.75rem; margin-bottom: 4rem; }
+  .toc-title { font-family: 'Syne', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.85rem; }
+  .toc ol { padding-left: 1.25rem; }
+  .toc li { margin: 0.3rem 0; }
+  .toc a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color 0.15s; }
+  .toc a:hover { color: var(--accent); }
+  .section { margin-bottom: 4.5rem; animation: fadeUp 0.4s ease both; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .section:nth-child(2){animation-delay:0.05s} .section:nth-child(3){animation-delay:0.10s}
+  .section:nth-child(4){animation-delay:0.15s} .section:nth-child(5){animation-delay:0.20s}
+  .section:nth-child(6){animation-delay:0.25s} .section:nth-child(7){animation-delay:0.30s}
+  .section:nth-child(8){animation-delay:0.35s}
+  .section-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .step-num { width: var(--step-size); height: var(--step-size); min-width: var(--step-size); background: var(--accent); color: #000; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 0.375rem; }
+  h2 { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; }
+  h3 { font-family: 'Syne', sans-serif; font-size: 1.05rem; font-weight: 600; margin: 1.75rem 0 0.6rem; color: var(--accent2); }
+  p { margin-bottom: 1rem; color: #b0bac8; }
+  p strong { color: var(--text); font-weight: 500; }
+  .code-block { background: var(--code-bg); border: 1px solid var(--border); border-radius: 0.5rem; overflow: hidden; margin: 1rem 0 1.5rem; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 1rem; background: #0f1318; border-bottom: 1px solid var(--border); }
+  .code-label { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .copy-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 0.25rem 0.65rem; border-radius: 0.25rem; cursor: pointer; transition: all 0.15s; letter-spacing: 0.06em; }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn.copied { border-color: #4ade80; color: #4ade80; }
+  pre { padding: 1.25rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; line-height: 1.7; color: #c9d1d9; }
+  .kw { color: #ff7b72; } .str { color: #a5d6ff; } .cmt { color: #6e7681; font-style: italic; }
+  .fn { color: #d2a8ff; } .num { color: #f2cc60; } .acc { color: var(--accent); }
+  .callout { display: flex; gap: 0.875rem; padding: 1rem 1.25rem; border-radius: 0.5rem; margin: 1.25rem 0; font-size: 0.9rem; }
+  .callout-icon { font-size: 1.1rem; flex-shrink: 0; padding-top: 0.1rem; }
+  .callout-body { color: #b0bac8; }
+  .callout-body strong { color: var(--text); }
+  .callout.info  { background: rgba(87,200,255,0.07); border: 1px solid rgba(87,200,255,0.2); }
+  .callout.warn  { background: rgba(255,200,87,0.07); border: 1px solid rgba(255,200,87,0.2); }
+  .callout.tip   { background: rgba(232,255,87,0.06); border: 1px solid rgba(232,255,87,0.18); }
+  .file-tree { background: var(--code-bg); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1.25rem 1.5rem; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; line-height: 1.9; color: #c9d1d9; margin: 1rem 0 1.5rem; }
+  .file-tree .dir { color: var(--accent2); } .file-tree .file { color: #c9d1d9; } .file-tree .desc { color: var(--muted); font-size: 0.75rem; margin-left: 0.5rem; }
+  .checklist { list-style: none; margin: 1rem 0 1.5rem; }
+  .checklist li { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-size: 0.92rem; color: #b0bac8; }
+  .checklist li:last-child { border-bottom: none; }
+  .check-icon { width: 1.3rem; height: 1.3rem; background: rgba(232,255,87,0.1); border: 1px solid rgba(232,255,87,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: var(--accent); flex-shrink: 0; margin-top: 0.15rem; }
+  .screenshot { background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; padding: 2rem; margin: 1rem 0 1.5rem; position: relative; overflow: hidden; }
+  .screenshot::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2.5rem; background: #0f1318; border-bottom: 1px solid var(--border); }
+  .screenshot-dots { position: absolute; top: 0.85rem; left: 1rem; display: flex; gap: 0.4rem; }
+  .screenshot-dots span { width: 0.65rem; height: 0.65rem; border-radius: 50%; display: inline-block; }
+  .screenshot-dots span:nth-child(1){background:#ff5f57} .screenshot-dots span:nth-child(2){background:#febc2e} .screenshot-dots span:nth-child(3){background:#28c840}
+  .screenshot-content { margin-top: 2rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #6e7681; line-height: 1.8; }
+  .screenshot-content .ok { color: #4ade80; } .screenshot-content .info { color: var(--accent2); }
+  .screenshot-content .url { color: var(--accent); text-decoration: underline; } .screenshot-content .dim { color: #3d4451; }
+  .connect-box { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1.5rem; margin: 1rem 0 1.5rem; }
+  .connect-box h4 { font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent2); margin-bottom: 0.75rem; }
+  .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin: 1rem 0 1.5rem; }
+  @media (max-width: 600px) { .tools-grid { grid-template-columns: 1fr; } }
+  .tool-card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem 1.1rem; transition: border-color 0.15s; }
+  .tool-card:hover { border-color: rgba(232,255,87,0.3); }
+  .tool-card.new { border-color: rgba(232,255,87,0.25); background: rgba(232,255,87,0.04); }
+  .tool-name { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent); margin-bottom: 0.35rem; }
+  .tool-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; background: rgba(232,255,87,0.15); color: var(--accent); padding: 0.1rem 0.4rem; border-radius: 0.2rem; margin-left: 0.4rem; vertical-align: middle; }
+  .tool-desc { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+  .workflow-steps { display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0 1.5rem; }
+  .workflow-step { display: flex; align-items: flex-start; gap: 1rem; padding: 0.85rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; }
+  .workflow-num { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--accent); background: rgba(232,255,87,0.1); border: 1px solid rgba(232,255,87,0.2); padding: 0.2rem 0.5rem; border-radius: 0.25rem; flex-shrink: 0; margin-top: 0.15rem; }
+  .workflow-content { flex: 1; }
+  .workflow-tool { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent2); margin-bottom: 0.2rem; }
+  .workflow-desc { font-size: 0.85rem; color: var(--muted); }
+  .footer { border-top: 1px solid var(--border); padding-top: 2.5rem; margin-top: 2rem; color: var(--muted); font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+  .footer a { color: var(--accent2); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+  code { font-family: 'JetBrains Mono', monospace; font-size: 0.82em; background: rgba(255,255,255,0.07); padding: 0.15em 0.45em; border-radius: 0.25rem; color: var(--accent2); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <div class="hero-badge">Deployment Tutorial · v2</div>
+    <h1>Deploy the <em>TED MCP Server</em><br>to Railway</h1>
+    <p class="hero-sub">
+      Step-by-step guide to deploying your EU procurement server live —
+      now with <strong>7 tools</strong> including CPV lookup, PDF reading,
+      and AI-assisted notice analysis. No API keys required.
+    </p>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-title">In this guide</div>
+    <ol>
+      <li><a href="#s1">What's in the server — all 7 tools</a></li>
+      <li><a href="#s2">Recommended workflow</a></li>
+      <li><a href="#s3">Set up your local project</a></li>
+      <li><a href="#s4">Push to GitHub</a></li>
+      <li><a href="#s5">Deploy on Railway</a></li>
+      <li><a href="#s6">Verify the deployment</a></li>
+      <li><a href="#s7">Connect to Claude Desktop</a></li>
+      <li><a href="#s8">Try it out — example prompts</a></li>
+    </ol>
+  </nav>
+
+  <!-- ── Step 0: Tools ── -->
+  <section class="section" id="s1">
+    <div class="section-header">
+      <div class="step-num">0</div>
+      <h2>What's in the server — all 7 tools</h2>
+    </div>
+
+    <p>The server exposes 7 MCP tools. The two marked <span style="color:var(--accent);font-size:0.8rem;font-family:'JetBrains Mono',monospace;background:rgba(232,255,87,0.12);padding:0.1em 0.4em;border-radius:0.2rem;">new</span> were added in the latest version.</p>
+
+    <div class="tools-grid">
+      <div class="tool-card new">
+        <div class="tool-name">lookup_cpv_codes <span class="tool-badge">new</span></div>
+        <div class="tool-desc">Search ~300 EU CPV codes by keyword. Always use this before searching to get the right 8-digit code.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">search_notices</div>
+        <div class="tool-desc">Structured search by keywords, country, CPV code and notice type. No raw query syntax needed.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_notice</div>
+        <div class="tool-desc">Retrieve full metadata for a specific notice by publication number.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_latest_notices</div>
+        <div class="tool-desc">Most recently published notices, filterable by country and CPV code.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">download_notice</div>
+        <div class="tool-desc">Returns HTML or XML content inline, or a direct PDF download URL.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_notice_url</div>
+        <div class="tool-desc">Returns the direct TED URL for a notice in any format and language.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">read_notice_pdf</div>
+        <div class="tool-desc">Downloads a PDF and extracts full text as clean Markdown using PyMuPDF4LLM.</div>
+      </div>
+      <div class="tool-card new">
+        <div class="tool-name">summarise_notice <span class="tool-badge">new</span></div>
+        <div class="tool-desc">Fetches metadata + PDF text in one call and instructs the LLM to produce a structured procurement analysis. No API key needed.</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-icon">💡</div>
+      <div class="callout-body">
+        <strong>No API keys required.</strong> All 7 tools work anonymously.
+        The <code>summarise_notice</code> tool does not call an external AI — it returns
+        the notice content to the LLM already in the conversation, which then
+        generates the analysis directly.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Step 1: Workflow ── -->
+  <section class="section" id="s2">
+    <div class="section-header">
+      <div class="step-num">1</div>
+      <h2>Recommended workflow</h2>
+    </div>
+
+    <p>The tools are designed to chain together naturally:</p>
+
+    <div class="workflow-steps">
+      <div class="workflow-step">
+        <div class="workflow-num">01</div>
+        <div class="workflow-content">
+          <div class="workflow-tool">lookup_cpv_codes</div>
+          <div class="workflow-desc">Find the right CPV code for your sector — e.g. <code>"drone"</code> → <code>35613000</code> (Unmanned aerial vehicles)</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="workflow-num">02</div>
+        <div class="workflow-content">
+          <div class="workflow-tool">search_notices / get_latest_notices</div>
+          <div class="workflow-desc">Search using the CPV code, country, and keywords to find relevant tenders</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="workflow-num">03</div>
+        <div class="workflow-content">
+          <div class="workflow-tool">summarise_notice</div>
+          <div class="workflow-desc">Fetch full metadata + PDF text so the LLM can produce a complete procurement analysis in one step</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="workflow-num">04</div>
+        <div class="workflow-content">
+          <div class="workflow-tool">read_notice_pdf / download_notice</div>
+          <div class="workflow-desc">Go deeper — read the raw PDF text or download the document in another language</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Step 2: Local setup ── -->
+  <section class="section" id="s3">
+    <div class="section-header">
+      <div class="step-num">2</div>
+      <h2>Set up your local project</h2>
+    </div>
+
+    <p>Your project folder should contain exactly these files:</p>
+
+    <div class="file-tree">
+      <div><span class="dir">ted-mcp-http/</span></div>
+      <div>&nbsp;&nbsp;├── <span class="file">server.py</span>     <span class="desc">← the MCP server (all 7 tools)</span></div>
+      <div>&nbsp;&nbsp;├── <span class="file">requirements.txt</span><span class="desc">← Python dependencies</span></div>
+      <div>&nbsp;&nbsp;├── <span class="file">Dockerfile</span>     <span class="desc">← container build instructions</span></div>
+      <div>&nbsp;&nbsp;├── <span class="file">railway.json</span>   <span class="desc">← Railway config-as-code</span></div>
+      <div>&nbsp;&nbsp;├── <span class="file">TUTORIAL.html</span>  <span class="desc">← this file</span></div>
+      <div>&nbsp;&nbsp;├── <span class="file">README.md</span>      <span class="desc">← documentation</span></div>
+      <div>&nbsp;&nbsp;└── <span class="file">.gitignore</span></div>
+    </div>
+
+    <h3>Verify it runs locally first</h3>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-label">terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      </div>
+      <pre><span class="cmt"># Create virtual environment and install dependencies</span>
+python -m venv .venv
+source .venv/bin/activate        <span class="cmt"># Windows: .venv\Scripts\activate</span>
+pip install -r requirements.txt
+
+<span class="cmt"># Start the server</span>
+python server.py</pre>
+    </div>
+
+    <p>You should see:</p>
+
+    <div class="screenshot">
+      <div class="screenshot-dots"><span></span><span></span><span></span></div>
+      <div class="screenshot-content">
+        <div><span class="ok">INFO</span>:     Started server process [12345]</div>
+        <div><span class="ok">INFO</span>:     Application startup complete.</div>
+        <div><span class="info">INFO</span>:     Uvicorn running on <span class="url">http://0.0.0.0:8000</span></div>
+        <div class="dim">Press CTRL+C to quit</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <div class="callout-icon">⚠️</div>
+      <div class="callout-body">
+        <strong>First install takes longer than usual.</strong> PyMuPDF includes native compiled binaries (~50 MB).
+        This is normal — subsequent installs use pip's cache.
+      </div>
+    </div>
+
+    <div class="callout info">
+      <div class="callout-icon">ℹ️</div>
+      <div class="callout-body">
+        The MCP endpoint is at <code>http://localhost:8000/mcp</code>. Use the MCP Inspector to
+        explore all 7 tools interactively before deploying.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Step 3: GitHub ── -->
+  <section class="section" id="s4">
+    <div class="section-header">
+      <div class="step-num">3</div>
+      <h2>Push to GitHub</h2>
+    </div>
+
+    <p>Railway deploys directly from a GitHub repo. Every push to <code>main</code> triggers an automatic redeploy.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-label">terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      </div>
+      <pre>cd ted-mcp-http
+git init
+git add .
+git commit -m <span class="str">"TED MCP server — 7 tools"</span>
+
+git remote add origin https://github.com/<span class="acc">YOUR_USERNAME</span>/ted-mcp-http.git
+git branch -M main
+git push -u origin main</pre>
+    </div>
+
+    <div class="callout warn">
+      <div class="callout-icon">⚠️</div>
+      <div class="callout-body">
+        Make sure <strong>.gitignore</strong> is in place. Never commit <code>.venv/</code> or any <code>.env</code> files.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Step 4: Railway deploy ── -->
+  <section class="section" id="s5">
+    <div class="section-header">
+      <div class="step-num">4</div>
+      <h2>Deploy on Railway</h2>
+    </div>
+
+    <ul class="checklist">
+      <li>
+        <div class="check-icon">1</div>
+        <div>Go to <strong>railway.app</strong> → sign in → click <strong>New Project</strong>.</div>
+      </li>
+      <li>
+        <div class="check-icon">2</div>
+        <div>Select <strong>"Deploy from GitHub repo"</strong>. Authorise Railway if prompted.</div>
+      </li>
+      <li>
+        <div class="check-icon">3</div>
+        <div>Select <strong>ted-mcp-http</strong> from your repo list → click <strong>Deploy Now</strong>.</div>
+      </li>
+      <li>
+        <div class="check-icon">4</div>
+        <div>Railway detects the <code>Dockerfile</code> and starts building. <strong>The build takes 2–4 minutes</strong> because PyMuPDF includes native binaries — this is expected.</div>
+      </li>
+      <li>
+        <div class="check-icon">5</div>
+        <div>Once deployed, go to the service → <strong>Settings</strong> → <strong>Networking</strong> → <strong>"Generate Domain"</strong> to get your public URL.</div>
+      </li>
+    </ul>
+
+    <div class="screenshot">
+      <div class="screenshot-dots"><span></span><span></span><span></span></div>
+      <div class="screenshot-content">
+        <div><span class="info">Building</span>  Dockerfile detected</div>
+        <div><span class="info">Step 1/6</span>  FROM python:3.12-slim</div>
+        <div><span class="info">Step 2/6</span>  RUN apt-get install libmupdf-dev</div>
+        <div><span class="info">Step 3/6</span>  COPY requirements.txt .</div>
+        <div><span class="info">Step 4/6</span>  RUN pip install ... <span class="dim">(PyMuPDF ~2min)</span></div>
+        <div><span class="info">Step 5/6</span>  COPY server.py .</div>
+        <div class="dim">──────────────────────────────</div>
+        <div><span class="ok">✓ Build succeeded</span>  in 3m 22s</div>
+        <div><span class="ok">✓ Deployed</span>  <span class="url">ted-mcp-http-production.up.railway.app</span></div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <div class="callout-icon">💡</div>
+      <div class="callout-body">
+        No environment variables need to be set. Railway injects <code>$PORT</code> automatically,
+        and no API keys are required for any of the 7 tools.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Step 5: Verify ── -->
+  <section class="section" id="s6">
+    <div class="section-header">
+      <div class="step-num">5</div>
+      <h2>Verify the deployment</h2>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-label">terminal</span>
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      </div>
+      <pre><span class="cmt"># Health check — should return HTTP 200</span>
+curl -I https://<span class="acc">YOUR-DOMAIN</span>.up.railway.app/mcp
+
+<span class="cmt"># Explore all 7 tools in the MCP Inspector</span>
+npx @modelcontextprotocol/inspector https://<span class="acc">YOUR-DOMAIN</span>.up.railway.app/mcp</pre>
+    </div>
+
+    <p>The MCP Inspector opens a browser UI where you can browse all 7 tools and run live test calls against the real TED API — no Claude connection needed.</p>
+  </section>
+
+  <!-- ── Step 6: Connect ── -->
+  <section class="section" id="s7">
+    <div class="section-header">
+      <div class="step-num">6</div>
+      <h2>Connect to Claude Desktop</h2>
+    </div>
+
+    <h3>Locate your config file</h3>
+    <div class="code-block">
+      <div class="code-header"><span class="code-label">paths</span></div>
+      <pre><span class="cmt"># macOS</span>
+~/Library/Application Support/Claude/claude_desktop_config.json
+
+<span class="cmt"># Windows</span>
+%APPDATA%\Claude\claude_desktop_config.json</pre>
+    </div>
+
+    <h3>Add the MCP server entry</h3>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-label">claude_desktop_config.json</span>
+        <button class="copy-btn" onclick="copyCode(this)">copy</button>
+      </div>
+      <pre>{
+  <span class="fn">"mcpServers"</span>: {
+    <span class="fn">"ted"</span>: {
+      <span class="fn">"command"</span>: <span class="str">"npx"</span>,
+      <span class="fn">"args"</span>: [
+        <span class="str">"-y"</span>,
+        <span class="str">"mcp-remote"</span>,
+        <span class="str">"https://<span class="acc">YOUR-DOMAIN</span>.up.railway.app/mcp"</span>
+      ]
+    }
+  }
+}</pre>
+    </div>
+
+    <p><strong>Restart Claude Desktop</strong> after saving. All 7 TED tools will appear in the tools panel.</p>
+
+    <div class="connect-box">
+      <h4>Or connect from Claude.ai (web)</h4>
+      <p style="font-size:0.88rem; color: var(--muted); margin:0;">
+        Go to <strong>Settings → Integrations → Add custom MCP server</strong> and paste:
+        <code>https://YOUR-DOMAIN.up.railway.app/mcp</code>
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Step 7: Prompts ── -->
+  <section class="section" id="s8">
+    <div class="section-header">
+      <div class="step-num">7</div>
+      <h2>Try it out — example prompts</h2>
+    </div>
+
+    <h3>CPV lookup</h3>
+    <div class="tools-grid">
+      <div class="tool-card">
+        <div class="tool-name">lookup_cpv_codes</div>
+        <div class="tool-desc">"What CPV code should I use for drone surveillance tenders?"</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">lookup_cpv_codes</div>
+        <div class="tool-desc">"Find the CPV codes for IT consulting and cybersecurity"</div>
+      </div>
+    </div>
+
+    <h3>Searching notices</h3>
+    <div class="tools-grid">
+      <div class="tool-card">
+        <div class="tool-name">search_notices</div>
+        <div class="tool-desc">"Find defence equipment tenders open in Greece right now"</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_latest_notices</div>
+        <div class="tool-desc">"Show the 5 most recent IT services tenders from Luxembourg"</div>
+      </div>
+    </div>
+
+    <h3>Analysis — new tools in action</h3>
+    <div class="tools-grid">
+      <div class="tool-card new">
+        <div class="tool-name">summarise_notice <span class="tool-badge">new</span></div>
+        <div class="tool-desc">"Summarise notice 00123456-2024 — is it relevant for a small IT firm?"</div>
+      </div>
+      <div class="tool-card new">
+        <div class="tool-name">summarise_notice <span class="tool-badge">new</span></div>
+        <div class="tool-desc">"What are the eligibility requirements in notice 00654321-2024?"</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">read_notice_pdf</div>
+        <div class="tool-desc">"Read the full PDF of notice 00123456-2024 in French and extract the award criteria"</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">Combined workflow</div>
+        <div class="tool-desc">"Find drone tenders in Greece, then give me a full analysis of the most recent one"</div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <div class="callout-icon">ℹ️</div>
+      <div class="callout-body">
+        <strong>No API keys required for any of these prompts.</strong> The TED Search API
+        is fully anonymous. <code>summarise_notice</code> returns data directly to the
+        LLM in the conversation — no external AI call is made by the server.
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div>TED MCP Server · 7 tools · MIT License</div>
+    <div>
+      <a href="https://docs.ted.europa.eu/api/latest/index.html" target="_blank">TED API Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://railway.com/docs" target="_blank">Railway Docs</a>
+      &nbsp;·&nbsp;
+      <a href="https://modelcontextprotocol.io" target="_blank">MCP Spec</a>
+      &nbsp;·&nbsp;
+      <a href="https://pymupdf.readthedocs.io" target="_blank">PyMuPDF Docs</a>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    btn.textContent = 'copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+</script>
+</body>
+</html>
