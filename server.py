@@ -6,8 +6,11 @@ Search API:  https://api.ted.europa.eu/v3  (anonymous)
 Downloads:   https://ted.europa.eu/{lang}/notice/{pub_number}/{format}
 """
 
+import io
 import os
 import httpx
+import pymupdf4llm
+import pymupdf
 from mcp.server.fastmcp import FastMCP
 
 # ── Server ─────────────────────────────────────────────────────────────────────
@@ -327,6 +330,91 @@ async def get_latest_notices(
     result["filters"] = {"country": country, "cpv_code": cpv_code, "scope": scope}
     return result
 
+
+
+@mcp.tool()
+async def read_notice_pdf(
+    publication_number: str,
+    language: str = "en",
+    max_pages: int = 50,
+) -> dict:
+    """
+    Download a TED notice PDF and extract its full text as Markdown for LLM analysis.
+
+    Use this when you need to read and analyse the actual content of a tender document —
+    contract requirements, technical specifications, award criteria, eligibility
+    conditions, deadlines, budget, and so on.
+
+    Text is extracted with pymupdf4llm which preserves headings, tables, and document
+    structure as clean Markdown, optimised for LLM consumption.
+
+    Args:
+        publication_number: TED publication number, e.g. "123456-2024".
+                            Use the value from search_notices or get_notice results.
+        language: Two-letter EU language code, e.g. "en", "fr", "de", "el".
+                  Default "en". Use the buyer country language for the most
+                  complete version of the document.
+        max_pages: Maximum pages to extract (1-200). Default 50.
+                   Large procurement documents can exceed 100 pages.
+    """
+    lang = language.lower()
+    if lang not in VALID_LANGUAGES:
+        return {"error": f"Invalid language '{lang}'. Use a two-letter EU language code."}
+
+    max_pages = min(200, max(1, max_pages))
+    pdf_url = _notice_url(publication_number, "pdf", lang)
+
+    # Download the PDF bytes
+    async with httpx.AsyncClient(
+        timeout=60,
+        follow_redirects=True,
+        headers={"User-Agent": HEADERS["User-Agent"]},
+    ) as client:
+        resp = await client.get(pdf_url)
+        if resp.status_code >= 400:
+            return {
+                "error": f"Could not download PDF: HTTP {resp.status_code}",
+                "url": pdf_url,
+                "hint": "Try a different language code or check the publication number.",
+            }
+        pdf_bytes = resp.content
+
+    if len(pdf_bytes) < 1000:
+        return {
+            "error": "Downloaded file is too small to be a valid PDF.",
+            "url": pdf_url,
+            "size_bytes": len(pdf_bytes),
+        }
+
+    # Open from bytes and extract as Markdown
+    doc = pymupdf.open(stream=io.BytesIO(pdf_bytes), filetype="pdf")
+    total_pages = len(doc)
+    pages_to_read = min(total_pages, max_pages)
+
+    md_text = pymupdf4llm.to_markdown(
+        doc,
+        pages=list(range(pages_to_read)),
+    )
+    doc.close()
+
+    # Cap output to avoid overwhelming the LLM context window
+    MAX_CHARS = 80_000
+    truncated = len(md_text) > MAX_CHARS
+    if truncated:
+        md_text = md_text[:MAX_CHARS]
+
+    return {
+        "publication_number": publication_number,
+        "language": lang,
+        "source_url": pdf_url,
+        "total_pages": total_pages,
+        "pages_extracted": pages_to_read,
+        "truncated": truncated,
+        **({"truncation_note": f"Output truncated to {MAX_CHARS} chars. "
+                               "Increase max_pages or re-call for additional pages."
+           } if truncated else {}),
+        "content": md_text,
+    }
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
 
