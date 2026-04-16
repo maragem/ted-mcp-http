@@ -115,24 +115,76 @@ Restart Claude Desktop. The TED tools will appear in the tools panel (the hammer
 
 ## Example Prompts
 
-### CPV lookup
+### Quick reference
+
+#### CPV lookup
 - *"What CPV code should I use for drone surveillance tenders?"*
 - *"Find the CPV code for hospital construction"*
 - *"What codes cover IT consulting services?"*
 
-### Searching notices
+#### Searching notices
 - *"Find defence equipment tenders in Greece"*
 - *"Show me the 5 most recent IT services tenders from Luxembourg"*
 - *"Any open construction tenders in Belgium?"*
 
-### Reading and analysing
+#### Reading and analysing
 - *"Summarise notice 00123456-2024"*
 - *"What are the eligibility criteria in notice 00654321-2024?"*
 - *"Read the PDF of notice 00123456-2024 in French and explain the award criteria"*
 
-### Combined workflows
+#### Combined workflows
 - *"Find drone tenders in Greece, then summarise the most recent one"*
 - *"Search for IT consulting tenders in Luxembourg, read the top result, and tell me if a small company could apply"*
+
+---
+
+### Full capability test — 5-question sequence
+
+The following sequence is designed to exercise all 7 tools in a realistic, end-to-end procurement workflow. Run these questions in order in a single conversation session.
+
+---
+
+**Q1 — CPV discovery + broad search**
+
+> *"I'm looking for opportunities in AI and machine learning services across the EU. What CPV codes cover this area, and what are the most recent open tenders?"*
+
+Chains `lookup_cpv_codes` → `get_latest_notices`. Tests whether the LLM correctly discovers the right codes and uses them immediately without being told to.
+
+---
+
+**Q2 — Targeted country + multi-criteria search**
+
+> *"Narrow it down to Belgium and Luxembourg only, and also include any IT consulting tenders. Give me the top 10 results with their deadlines."*
+
+Triggers `search_notices` with multiple CPV codes, country filters, and `notice_type="cn-standard"`. Tests multi-parameter search and deadline presentation.
+
+---
+
+**Q3 — Deep analysis of a specific notice**
+
+> *"Take the most relevant result from that list and give me a full breakdown — who the buyer is, what they actually need, the eligibility requirements, the award criteria, and whether a boutique 10-person consulting firm could realistically bid."*
+
+Triggers `summarise_notice`, which fetches metadata + full PDF text and passes it to the LLM for structured analysis. Tests the complete summarisation workflow and the LLM's ability to reason about bidder fit beyond the raw data.
+
+---
+
+**Q4 — Raw document deep dive**
+
+> *"I want to read the actual technical specifications section of that tender. Pull the full PDF in English and show me everything related to deliverables, acceptance criteria, and reporting requirements."*
+
+Triggers `read_notice_pdf` for raw Markdown extraction. Tests whether the PDF reader produces clean enough output for targeted section extraction, and exercises the `max_pages` parameter on longer documents.
+
+---
+
+**Q5 — Shareable output in multiple formats and languages**
+
+> *"Give me the direct PDF link for this tender in French so I can forward it to a colleague in Paris, and also the HTML link in English for our internal review."*
+
+Triggers `get_notice_url` twice — `format="pdf", language="fr"` and `format="html", language="en"`. Tests conversation memory (the LLM must carry the publication number forward from Q1–Q4 without being reminded) and multi-format/language output.
+
+---
+
+> **Why this sequence works as a stress test:** it covers all 7 tools across 5 turns, tests multi-step chaining, requires the LLM to form an opinion in Q3, exercises raw text extraction in Q4, and validates conversation memory and the URL tool in Q5 — all within a realistic workflow a procurement analyst would actually run.
 
 ---
 
