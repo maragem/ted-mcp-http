@@ -1,10 +1,10 @@
 # TED MCP Server
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives LLMs tools to search, retrieve, and download **EU public procurement notices** from [TED — Tenders Electronic Daily](https://ted.europa.eu).
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives LLMs tools to search, retrieve, read, and analyse **EU public procurement notices** from [TED — Tenders Electronic Daily](https://ted.europa.eu).
 
 Runs over **Streamable HTTP transport** — ready to deploy anywhere, including Railway.
 
-> All tools use the anonymous TED Search API. No API key required.
+> **No API keys required.** All 7 tools work anonymously using the public TED v3 API.
 
 ---
 
@@ -12,11 +12,25 @@ Runs over **Streamable HTTP transport** — ready to deploy anywhere, including 
 
 | Tool | Description |
 |---|---|
-| `search_notices` | Full-text + filter search across all TED notices. Supports TED expert-search syntax. |
-| `get_notice` | Retrieve full metadata for a specific notice by publication number. |
-| `download_notice` | Fetch notice content as HTML or XML inline, or get a PDF download URL. |
-| `get_notice_url` | Build a direct TED URL for a notice without downloading it. |
-| `get_latest_notices` | Get the most recently published notices, filterable by country or CPV code. |
+| `lookup_cpv_codes` | Search the EU CPV vocabulary by keyword to find the correct 8-digit procurement category code |
+| `search_notices` | Search TED notices using structured parameters (keywords, country, CPV code, notice type) |
+| `get_notice` | Retrieve full metadata for a specific notice by publication number |
+| `get_latest_notices` | Get the most recently published notices, filterable by country and CPV code |
+| `download_notice` | Fetch notice content as HTML or XML inline, or get a direct PDF download URL |
+| `get_notice_url` | Return the direct TED URL for a notice without downloading it |
+| `read_notice_pdf` | Download a notice PDF and extract its full text as Markdown for LLM analysis |
+| `summarise_notice` | Fetch metadata + full PDF text in one call so the LLM can produce a structured procurement analysis |
+
+---
+
+## Recommended Workflow
+
+The tools are designed to work together in a natural sequence:
+
+1. **`lookup_cpv_codes`** — find the right CPV code for a sector (e.g. `"drone"` → `35613000`)
+2. **`search_notices`** — search using the CPV code, country, and keywords
+3. **`summarise_notice`** — fetch the full notice content so the LLM can analyse it
+4. **`read_notice_pdf`** or **`download_notice`** — go deeper into a specific document
 
 ---
 
@@ -46,6 +60,16 @@ npx @modelcontextprotocol/inspector http://localhost:8000/mcp
 
 ---
 
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | Set by Railway automatically | Port the server listens on |
+
+No API keys required. All tools work anonymously.
+
+---
+
 ## Deploy to Railway
 
 Full step-by-step instructions are in **[TUTORIAL.html](./TUTORIAL.html)** — open it in a browser.
@@ -57,6 +81,8 @@ Full step-by-step instructions are in **[TUTORIAL.html](./TUTORIAL.html)** — o
 3. Select your repo. Railway detects the `Dockerfile` automatically and deploys.
 4. In your service settings → Networking → click **Generate Domain**.
 5. Your server is live at `https://your-domain.up.railway.app/mcp`.
+
+> **Note:** The build takes 2–4 minutes because PyMuPDF includes native binaries. This is normal.
 
 ---
 
@@ -82,35 +108,71 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. The TED tools will appear in the tools panel.
+Restart Claude Desktop. The TED tools will appear in the tools panel (the hammer icon).
 
 ---
 
 ## Example Prompts
 
-Once connected to an LLM, you can ask things like:
+### CPV lookup
+- *"What CPV code should I use for drone surveillance tenders?"*
+- *"Find the CPV code for hospital construction"*
+- *"What codes cover IT consulting services?"*
 
-- *"Find IT services tenders in Luxembourg published this year"*
-- *"Show me the 5 most recent construction tenders from France"*
-- *"Get the full details of notice 00123456-2024"*
-- *"Download notice 00654321-2024 as HTML in French"*
-- *"Give me the PDF link for notice 00123456-2024"*
-- *"Find hospital construction tenders in Belgium and summarise the top result"*
+### Searching notices
+- *"Find defence equipment tenders in Greece"*
+- *"Show me the 5 most recent IT services tenders from Luxembourg"*
+- *"Any open construction tenders in Belgium?"*
 
-### TED Expert Search Syntax
+### Reading and analysing
+- *"Summarise notice 00123456-2024"*
+- *"What are the eligibility criteria in notice 00654321-2024?"*
+- *"Read the PDF of notice 00123456-2024 in French and explain the award criteria"*
 
-The `search_notices` tool supports TED's expert-search syntax for precise filtering:
+### Combined workflows
+- *"Find drone tenders in Greece, then summarise the most recent one"*
+- *"Search for IT consulting tenders in Luxembourg, read the top result, and tell me if a small company could apply"*
 
-| Syntax | Meaning |
-|---|---|
-| `CY=[LU]` | Filter by country (ISO code) |
-| `TD=[3]` | Notice type (3 = Contract notice) |
-| `PC=[45*]` | CPV code prefix (45 = construction works) |
-| `PC=[72*]` | CPV code prefix (72 = IT services) |
-| `PD=[20240101,20241231]` | Publication date range |
-| `ND=[00123456-2024]` | Specific notice by publication number |
+---
 
-Combine with `AND` / `OR`: `TD=[3] AND CY=[FR] AND PC=[72*]`
+## Tool Reference
+
+### `lookup_cpv_codes`
+
+Searches the built-in EU CPV (Common Procurement Vocabulary) database by keyword.
+Always use this before searching if you are unsure of the correct CPV code.
+
+```
+keyword="drone"        → 35613000 – Unmanned aerial vehicles
+keyword="hospital"     → 45215000 – Construction for health services
+keyword="IT services"  → 72000000 – IT services: consulting, software, support
+keyword="surveillance" → 35120000, 79720000 – Security systems / Investigation
+keyword="training"     → 80500000 – Training services
+```
+
+### `search_notices`
+
+Structured search — pass parameters directly, no raw query string needed.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `keywords` | string | Free-text search, e.g. `"drone UAV surveillance"` |
+| `country` | string | 2-letter ISO code: `"LU"`, `"FR"`, `"GR"`, `"BE"` |
+| `cpv_code` | string | 8-digit CPV code, e.g. `"35613000"` |
+| `notice_type` | string | `"cn-standard"` (contract notice), `"can-standard"` (award), `"pin-only"` (prior info) |
+| `page` | int | Page number, default 1 |
+| `page_size` | int | Results per page, max 100, default 10 |
+| `scope` | string | `"ACTIVE"` (open tenders only) or `"ALL"`, default `"ALL"` |
+
+### `summarise_notice`
+
+Fetches metadata + full PDF text in one call and instructs the LLM to produce a structured analysis covering: overview, contract value, key dates, scope, eligibility, award criteria, bidder action points, and notable clauses.
+
+Optional `focus` parameter narrows the analysis, e.g. `focus="eligibility criteria"`.
+
+### `read_notice_pdf`
+
+Downloads the PDF and returns the full extracted text as clean Markdown. Supports up to 200 pages. Use when you need raw document content for detailed analysis beyond what `summarise_notice` provides.
 
 ---
 
@@ -118,8 +180,8 @@ Combine with `AND` / `OR`: `TD=[3] AND CY=[FR] AND PC=[72*]`
 
 ```
 ted-mcp-http/
-├── server.py          # MCP server — FastMCP + Streamable HTTP transport
-├── requirements.txt   # Python dependencies (mcp, httpx, uvicorn)
+├── server.py          # MCP server — all 7 tools
+├── requirements.txt   # Python dependencies
 ├── Dockerfile         # Container build for Railway
 ├── railway.json       # Railway config-as-code
 ├── TUTORIAL.html      # Step-by-step Railway deployment guide
@@ -137,6 +199,18 @@ ted-mcp-http/
 | Notice (HTML/PDF) | `https://ted.europa.eu/{lang}/notice/{pub_number}/{format}` |
 | Notice (XML) | `https://ted.europa.eu/en/notice/{pub_number}/xml` |
 
+### TED v3 Query Syntax (built by the server automatically)
+
+| Field | Example |
+|---|---|
+| Country | `buyer-country IN (LUX)` |
+| CPV code | `classification-cpv IN (35613000)` |
+| Notice type | `notice-type IN (cn-standard)` |
+| Publication date | `publication-date >= 20240101` |
+| Combined | `buyer-country IN (FRA) AND classification-cpv IN (72000000)` |
+
+Country codes use 3-letter ISO format (`LUX`, `FRA`, `DEU`, `GRC`). The server converts 2-letter codes automatically.
+
 ### Rate Limits (TED fair usage policy)
 
 | Operation | Limit |
@@ -152,6 +226,8 @@ ted-mcp-http/
 - `mcp[cli]` >= 1.0.0
 - `httpx` >= 0.27.0
 - `uvicorn` >= 0.30.0
+- `pymupdf` >= 1.24.0
+- `pymupdf4llm` >= 0.0.17
 
 ---
 
