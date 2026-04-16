@@ -28,9 +28,10 @@ Runs over **Streamable HTTP transport** — ready to deploy anywhere, including 
 The tools are designed to work together in a natural sequence:
 
 1. **`lookup_cpv_codes`** — find the right CPV code for a sector (e.g. `"drone"` → `35613000`)
-2. **`search_notices`** — search using the CPV code, country, and keywords
-3. **`summarise_notice`** — fetch the full notice content so the LLM can analyse it
-4. **`read_notice_pdf`** or **`download_notice`** — go deeper into a specific document
+2. **`search_notices`** or **`get_latest_notices`** — find relevant tenders using the CPV code, country, and keywords
+3. **`summarise_notice`** — fetch metadata + full PDF text in one call so the LLM can produce a structured analysis
+4. **`read_notice_pdf`** — extract the full PDF text for deeper analysis of a specific notice
+5. **`get_notice_url`** or **`download_notice`** — get the direct link or fetch the raw HTML/XML content
 
 ---
 
